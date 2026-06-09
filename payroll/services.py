@@ -29,7 +29,7 @@ from payroll.validation import PaymentPointValidation, PayrollValidation, Benefi
 from calculation.services import get_calculation_object
 from core.services.utils import output_exception, check_authentication
 from contribution_plan.models import PaymentPlan
-from social_protection.models import Beneficiary, BeneficiaryStatus
+from social_protection.models import Beneficiary, BeneficiaryStatus, GroupBeneficiary
 from tasks_management.apps import TasksManagementConfig
 from tasks_management.models import Task
 from tasks_management.services import TaskService, _get_std_task_data_payload
@@ -181,12 +181,23 @@ class PayrollService(BaseService):
 
     def _select_beneficiary_based_on_criteria(self, obj_data, payment_plan):
         json_ext = obj_data.get("json_ext", {})
+        benefit_plan = payment_plan.benefit_plan
+        benefit_plan_type = getattr(benefit_plan, "type", None)
 
-        beneficiaries_queryset = Beneficiary.objects.filter(
-            benefit_plan__id=payment_plan.benefit_plan.id,
-            status=BeneficiaryStatus.ACTIVE,
-            is_deleted=False,
-        )
+        # GROUP benefit plans use GroupBeneficiary rather than Beneficiary.
+        is_group_plan = str(benefit_plan_type).upper() == "GROUP"
+        if is_group_plan:
+            beneficiaries_queryset = GroupBeneficiary.objects.filter(
+                benefit_plan__id=benefit_plan.id,
+                status=BeneficiaryStatus.ACTIVE,
+                is_deleted=False,
+            )
+        else:
+            beneficiaries_queryset = Beneficiary.objects.filter(
+                benefit_plan__id=benefit_plan.id,
+                status=BeneficiaryStatus.ACTIVE,
+                is_deleted=False,
+            )
 
         filter_criteria = json_ext.get("filter_criteria", {})
 
@@ -199,12 +210,20 @@ class PayrollService(BaseService):
 
         location_ids = filter_criteria.get("location_ids", [])
         if location_ids:
-            beneficiaries_queryset = beneficiaries_queryset.filter(
-                Q(individual__location__uuid__in=location_ids)
-                | Q(individual__location__parent__uuid__in=location_ids)
-                | Q(individual__location__parent__parent__uuid__in=location_ids)
-                | Q(individual__location__parent__parent__parent__uuid__in=location_ids)
-            )
+            if is_group_plan:
+                beneficiaries_queryset = beneficiaries_queryset.filter(
+                    Q(group__location__uuid__in=location_ids)
+                    | Q(group__location__parent__uuid__in=location_ids)
+                    | Q(group__location__parent__parent__uuid__in=location_ids)
+                    | Q(group__location__parent__parent__parent__uuid__in=location_ids)
+                )
+            else:
+                beneficiaries_queryset = beneficiaries_queryset.filter(
+                    Q(individual__location__uuid__in=location_ids)
+                    | Q(individual__location__parent__uuid__in=location_ids)
+                    | Q(individual__location__parent__parent__uuid__in=location_ids)
+                    | Q(individual__location__parent__parent__parent__uuid__in=location_ids)
+                )
 
         custom_filters = [
             criterion["custom_filter_condition"]
