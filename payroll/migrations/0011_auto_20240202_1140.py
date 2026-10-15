@@ -13,6 +13,8 @@ class Migration(migrations.Migration):
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ('payroll', '0010_auto_20240131_1015'),
+        ('payment_cycle', '0001_initial'),
+        ('contribution_plan', '0008_historicalpaymentplan_paymentplan'),
     ]
 
     operations = [
