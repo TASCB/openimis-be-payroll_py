@@ -94,6 +94,9 @@ class Query(graphene.ObjectType):
         orderBy=graphene.List(of_type=graphene.String),
     )
 
+    payment_slip_rows = graphene.JSONString(
+        payroll_id=graphene.UUID(required=True),
+        description="One row per benefit of the payroll for its payment slips.")
     payroll_benefit_consumption = OrderedDjangoFilterConnectionField(
         PayrollBenefitConsumptionGQLType,
         orderBy=graphene.List(of_type=graphene.String),
@@ -196,6 +199,12 @@ class Query(graphene.ObjectType):
 
         query = Payroll.objects.filter(*filters)
         return gql_optimizer.query(query, info)
+
+    def resolve_payment_slip_rows(self, info, payroll_id):
+        Query._check_permissions(info.context.user, PayrollConfig.gql_payroll_search_perms)
+        from payroll.payment_slips import payment_slip_rows
+        payroll = Payroll.objects.filter(id=payroll_id, is_deleted=False).first()
+        return payment_slip_rows(payroll) if payroll else []
 
     def resolve_payroll_benefit_consumption(self, info, **kwargs):
         Query._check_permissions(info.context.user, PayrollConfig.gql_payroll_search_perms)
